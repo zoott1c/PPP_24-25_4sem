@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Файловая структура</title>
+</head>
+<body>
+    <h1>Файловая структура</h1>
+    <form action="/main.html" method="post">
+        <fieldset>
+            <legend>Изменить корневую директорию</legend>
+            <label for="new_path">Введите новый путь:</label>
+            <input type="text" id="new_path" name="new_path" required>
+            <button type="submit">Обновить</button>
+        </fieldset>
+    </form>
+
+    <hr>
+    <div>
+        <a href="/download_json">
+            <button> Скачать JSON</button>
+        </a>
+
+        <a href="/shutdown">
+            <button> Выключить сервер</button>
+        </a>
+    </div>
+
+    <hr>
+
+    <h2>Текущая структура:</h2>
+    <pre>{{ fails }}</pre>
+</body>
+</html>
