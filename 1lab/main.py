@@ -4,6 +4,23 @@ import json
 import os
 import urllib.parse
 import shutil
+import threading
+
+
+user_socket = None  # клиент user подключится к порту 3001
+
+
+
+def listen_user_trigger():
+    """Ожидает подключения клиента-user на втором порту"""
+    global user_socket
+    user_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    user_server.bind(('127.0.0.1', 3001))
+    user_server.listen(1)
+    print("Ожидаем подключения user на порту 3001...")
+    user_socket, addr = user_server.accept()
+    print("✅ User подключился:", addr)
+
 
 def start_server():
     """Основное тело сервера"""
@@ -96,53 +113,69 @@ def update_root(new_path):
 
 
 def load_page(request_data):
-    """ Загружаем HTML-страницу """
+    """Загружает HTML-страницу или обрабатывает спец-запросы"""
     HDRS = 'HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n'
-    path = request_data.split(' ')[1]
-    if "new_path=" in request_data:
-            try:
-                request_body = request_data.split("\r\n\r\n")[1]  
-                new_path = request_body.split("=")[1].replace("+", " ")  
-                new_path = urllib.parse.unquote(new_path) 
-                if update_root(new_path):  
-                    print("Директория успешно обновлена!") 
-            except Exception as e:
-                return HDRS.encode('utf-8') + f"<h1>Ошибка: {str(e)}</h1>".encode('utf-8')
-    
-    if path.startswith("/download_json"):
-            return download_json()
-    
-
-    if path.startswith("/shutdown"):
-        print("Выключение сервера...")
-        os._exit(0) 
 
     try:
-        with open("1lab/templates/main.html", "r", encoding="utf-8") as file:
-            response = file.read()
-    except FileNotFoundError:
+        path = request_data.split(' ')[1]
+    except IndexError:
         return HDRS.encode('utf-8') 
 
+    if "new_path=" in request_data:
+        try:
+            request_body = request_data.split("\r\n\r\n")[1]  
+            new_path = urllib.parse.unquote(request_body.split("=")[1].replace("+", " "))
+            update_root(new_path)
+        except Exception as e:
+            return HDRS.encode('utf-8') + f"<h1>Ошибка: {str(e)}</h1>".encode('utf-8')
 
-    if os.path.exists("structure.json"):  
-        with open("structure.json", "r", encoding="utf-8") as structure_file:
-            fcc_data = json.load(structure_file)
-            pretty_text = format_structure(fcc_data).replace("\n", "<br>")
-    else:
-        pretty_text = "Файл structure.json отсутствует"
+    if path.startswith("/download_json"):
+        return download_json()
 
-    response = response.replace("{{ fails }}", pretty_text) 
-    return HDRS.encode('utf-8') + response.encode('utf-8')
+    if path.startswith("/shutdown"):
+        os._exit(0)
+
+    if path == "/" or path.endswith(".html"):
+        try:
+            html_path = os.path.join(os.path.dirname(__file__), "templates", "main.html")
+            with open(html_path, "r", encoding="utf-8") as file:
+                response = file.read()
+        except FileNotFoundError:
+            return HDRS.encode('utf-8') 
+
+        if os.path.exists("structure.json"):
+            with open("structure.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+                pretty_text = format_structure(data).replace("\n", "<br>")
+        else:
+            pretty_text = "Файл structure.json отсутствует"
+
+        response = response.replace("{{ fails }}", pretty_text)
+        return HDRS.encode('utf-8') + response.encode('utf-8')
+
+    return 'HTTP/1.1 404 NOT FOUND\r\nContent-Type: text/html\r\n\r\n<h1>Страница не найдена</h1>'.encode('utf-8')
+
 
 def download_json():
-    """ Скачиваем JSON  """
+    """ Отдаёт JSON и уведомляет user-клиента """
+    global user_socket
     if os.path.exists("structure.json"):
         with open("structure.json", "r", encoding="utf-8") as file:
             json_data = file.read()
+
+        # отправка сигнала user-клиенту
+        if user_socket:
+            try:
+                user_socket.sendall(b"download")
+                print("📤 Сигнал отправлен user-клиенту")
+            except Exception as e:
+                print("⚠️ Не удалось отправить сигнал user:", e)
+
         HDRS = 'HTTP/1.1 200 OK\r\nContent-Disposition: attachment; filename="structure.json"\r\nContent-Type: application/json\r\n\r\n'
         return HDRS.encode('utf-8') + json_data.encode('utf-8')
 
     return 'HTTP/1.1 404 NOT FOUND\r\n\r\nФайл не найден'.encode('utf-8')
+
 
 
 if __name__ == "__main__":
@@ -152,6 +185,5 @@ if __name__ == "__main__":
     with open('structure.json', 'w', encoding='utf-8') as f:
         json.dump(structure, f, ensure_ascii=False, indent=4)
     print("Перейдите в http://127.0.0.1:2001/main.html")
+    threading.Thread(target=listen_user_trigger, daemon=True).start()
     start_server()
-
-
