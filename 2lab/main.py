@@ -1,8 +1,15 @@
+from fastapi import FastAPI
+from app.api.router import router as api_router
 
-def main():
+
+app = FastAPI(title="Lab Project")
+
+app.include_router(api_router)
+
+#def main():
     # Ваш код здесь
-    pass
+#    pass
 
-if __name__ == "__main__":
-    main()
+#if __name__ == "__main__":
+#    main()
 
