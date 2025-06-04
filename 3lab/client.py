@@ -10,21 +10,28 @@ async def ws_listener(token):
     url = f"{WS_URL}?token={token}"
     print(">>> Токен для WebSocket:", token)
     print(">>> Полный URL:", url)
-    from jose import jwt  # совместимо с сервером
- 
-
-    
-    SECRET_KEY = "SECRET"
-    ALGORITHM = "HS256"
-
-    decoded = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    print(">>> JWT payload:", decoded)
 
     async with websockets.connect(url) as websocket:
         print("Соединение с WebSocket установлено.")
         while True:
             msg = await websocket.recv()
+            # Проверим, если это строка, то парсим её в JSON
+            try:
+                msg = json.loads(msg)  # Преобразуем строку в JSON, если это строка
+            except json.JSONDecodeError:
+                print(f"Ошибка декодирования JSON: {msg}")
+                continue
+
             print("Получено сообщение:", msg)
+
+            # Обработка сообщений от сервера
+            if "status" in msg:
+                if msg["status"] == "CONNECTED":
+                    print(f"Соединение установлено: {msg['message']}")
+                elif msg["status"] == "TASK_STARTED":
+                    print(f"Задача начала выполнение. Task ID: {msg['task_id']}")
+                elif msg["status"] == "COMPLETED":
+                    print(f"Задача завершена. Путь: {msg['path']}, Общая дистанция: {msg['total_distance']}")
 
 def authenticate(email, password):
     response = requests.post(
@@ -52,16 +59,13 @@ def main():
     token = authenticate(email, password)
     input("Введите список точек (например: 1,2,3,4): ")
 
-    # Запускаем WebSocket слушатель в фоне и отправляем задачу
     async def run_both():
         task = asyncio.create_task(ws_listener(token))
-        await asyncio.sleep(1)  # чуть-чуть подождать, чтобы WebSocket точно подключился
+        await asyncio.sleep(1)  
         send_tsp_task(token, email)
-        await task  # ждать WebSocket бесконечно
+        await task  
 
     asyncio.run(run_both())
-
-
 
 if __name__ == "__main__":
     main()
